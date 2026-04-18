@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, run } from '@/lib/sqlite';
+import { query } from '@/lib/db';
 
 // 产品类型
 interface Product {
@@ -19,17 +19,14 @@ export async function GET(request: NextRequest) {
 		let params: string[];
 
 		if (keyword.trim()) {
-			// 搜索模式
 			sql = `
 				SELECT id, product_name, hs_code, created_at
 				FROM products
-				WHERE product_name LIKE ? OR hs_code LIKE ?
+				WHERE product_name ILIKE $1 OR hs_code ILIKE $1
 				ORDER BY id DESC
 			`;
-			const searchPattern = `%${keyword}%`;
-			params = [searchPattern, searchPattern];
+			params = [`%${keyword}%`];
 		} else {
-			// 获取全部
 			sql = `
 				SELECT id, product_name, hs_code, created_at
 				FROM products
@@ -59,7 +56,6 @@ export async function POST(request: NextRequest) {
 		const body = await request.json();
 		const { product_name, hs_code } = body;
 
-		// 验证必填字段
 		if (!product_name?.trim()) {
 			return NextResponse.json(
 				{ success: false, error: '产品名称不能为空' },
@@ -75,18 +71,14 @@ export async function POST(request: NextRequest) {
 
 		const sql = `
 			INSERT INTO products (product_name, hs_code, created_at)
-			VALUES (?, ?, datetime('now'))
+			VALUES ($1, $2, NOW())
+			RETURNING id, product_name, hs_code, created_at
 		`;
+		const params = [product_name.trim(), hs_code.trim()];
 
-		const result = await run(sql, [product_name.trim(), hs_code.trim()]);
+		const result = await query<Product>(sql, params);
 
-		// 获取刚插入的数据
-		const newProduct = await query<Product>(
-			'SELECT id, product_name, hs_code, created_at FROM products WHERE id = ?',
-			[result.lastInsertRowid]
-		);
-
-		if (newProduct.rows.length === 0) {
+		if (result.rows.length === 0) {
 			return NextResponse.json(
 				{ success: false, error: '创建产品失败' },
 				{ status: 500 }
@@ -95,7 +87,7 @@ export async function POST(request: NextRequest) {
 
 		return NextResponse.json({
 			success: true,
-			data: newProduct.rows[0],
+			data: result.rows[0],
 		});
 	} catch (error) {
 		console.error('Error creating product:', error);
@@ -112,7 +104,6 @@ export async function PUT(request: NextRequest) {
 		const body = await request.json();
 		const { id, product_name, hs_code } = body;
 
-		// 验证必填字段
 		if (!id) {
 			return NextResponse.json(
 				{ success: false, error: '产品ID不能为空' },
@@ -134,28 +125,24 @@ export async function PUT(request: NextRequest) {
 
 		const sql = `
 			UPDATE products
-			SET product_name = ?, hs_code = ?
-			WHERE id = ?
+			SET product_name = $1, hs_code = $2
+			WHERE id = $3
+			RETURNING id, product_name, hs_code, created_at
 		`;
+		const params = [product_name.trim(), hs_code.trim(), id];
 
-		const result = await run(sql, [product_name.trim(), hs_code.trim(), id]);
+		const result = await query<Product>(sql, params);
 
-		if (result.changes === 0) {
+		if (result.rows.length === 0) {
 			return NextResponse.json(
 				{ success: false, error: '产品不存在或更新失败' },
 				{ status: 404 }
 			);
 		}
 
-		// 获取更新后的数据
-		const updatedProduct = await query<Product>(
-			'SELECT id, product_name, hs_code, created_at FROM products WHERE id = ?',
-			[id]
-		);
-
 		return NextResponse.json({
 			success: true,
-			data: updatedProduct.rows[0],
+			data: result.rows[0],
 		});
 	} catch (error) {
 		console.error('Error updating product:', error);
@@ -179,10 +166,16 @@ export async function DELETE(request: NextRequest) {
 			);
 		}
 
-		const sql = `DELETE FROM products WHERE id = ?`;
-		const result = await run(sql, [parseInt(id, 10)]);
+		const sql = `
+			DELETE FROM products
+			WHERE id = $1
+			RETURNING id
+		`;
+		const params = [parseInt(id, 10)];
 
-		if (result.changes === 0) {
+		const result = await query<{ id: number }>(sql, params);
+
+		if (result.rowCount === 0) {
 			return NextResponse.json(
 				{ success: false, error: '产品不存在或删除失败' },
 				{ status: 404 }

@@ -6,7 +6,7 @@
 
 ### 技术栈
 - **框架**: Next.js 16 (App Router)
-- **数据库**: SQLite (本地文件存储)
+- **数据库**: PostgreSQL (原生 pg 库)
 - **ORM**: 无 (直接使用 SQL)
 - **API**: 原生 REST API (`/api/products`)
 - **UI**: shadcn/ui + Tailwind CSS 4
@@ -26,18 +26,38 @@ interface Product {
 
 ## 环境变量配置
 
-**无需配置任何环境变量** - SQLite 数据库完全本地化，数据存储在 `data/products.db` 文件中。
+```env
+# PostgreSQL 连接字符串（必填）
+PGDATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+
+# 或分开配置
+DATABASE_URL=postgresql://...
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=postgres
+```
 
 ## 数据库配置
 
-### 存储位置
-- **文件**: `data/products.db`
-- **表**: `products`
-
 ### 表结构
 - **表名**: `products`
-- **主键**: `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+- **主键**: `id` (serial)
 - **索引**: `product_name`, `hs_code`
+
+### 初始化 SQL
+```sql
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  product_name VARCHAR(500) NOT NULL,
+  hs_code VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_name ON products(product_name);
+CREATE INDEX IF NOT EXISTS idx_products_hs_code ON products(hs_code);
+```
 
 ### API 端点
 
@@ -57,13 +77,11 @@ src/
 │   ├── page.tsx           # 产品管理主页面
 │   └── api/
 │       └── products/
-│           └── route.ts   # SQLite API 路由
+│           └── route.ts   # PostgreSQL API 路由
 ├── lib/
 │   ├── products.ts        # 产品 CRUD 操作
-│   └── sqlite.ts          # SQLite 数据库封装
+│   └── db.ts              # PostgreSQL 连接池
 └── components/ui/         # shadcn/ui 组件库
-data/
-└── products.db             # SQLite 数据库文件
 ```
 
 ## 常用命令
@@ -89,21 +107,3 @@ pnpm start
 - ✅ 编辑产品 - 点击编辑按钮修改产品信息
 - ✅ 删除确认 - 二次确认后删除
 - ✅ 搜索筛选 - 支持按品名或 HS 编码搜索
-
-## 技术特点
-
-### 零依赖外部服务
-- 不需要 PostgreSQL
-- 不需要 Supabase
-- 不需要任何云数据库
-- 不需要配置环境变量
-
-### 数据持久化
-- SQLite 数据库文件存储在 `data/products.db`
-- 数据自动持久化到磁盘
-- 重启服务后数据保持不变
-
-### 适用场景
-- 小规模数据（< 10000 条）
-- 单实例部署
-- 无需多用户并发写入
