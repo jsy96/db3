@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { SupabaseScript } from '@/components/supabase-script';
 
 export const metadata: Metadata = {
 	title: {
@@ -26,9 +25,6 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="zh-CN">
-			<head>
-				<SupabaseScript />
-			</head>
 			<body className="antialiased">{children}</body>
 		</html>
 	);
