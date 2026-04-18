@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "bash ./scripts/build.sh",
     "dev": "bash ./scripts/dev.sh",
-    "preinstall": "npx only-allow pnpm",
-    "lint": "eslint",
+    "build": "pnpm install && pnpm next build",
     "start": "bash ./scripts/start.sh",
+    "lint": "eslint",
     "ts-check": "tsc -p tsconfig.json"
   },
   "dependencies": {
