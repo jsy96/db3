@@ -6,7 +6,9 @@
 
 ### 技术栈
 - **框架**: Next.js 16 (App Router)
-- **数据库**: Supabase PostgreSQL
+- **数据库**: PostgreSQL (原生 pg 库)
+- **ORM**: 无 (直接使用 SQL)
+- **API**: 原生 REST API (`/api/products`)
 - **UI**: shadcn/ui + Tailwind CSS 4
 - **包管理**: pnpm
 
@@ -25,8 +27,11 @@ interface Product {
 ## 环境变量配置
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# PostgreSQL 连接 (Coze 平台自动注入)
+PGDATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+
+# 其他可选
+DATABASE_URL=postgresql://...
 ```
 
 ## 数据库配置
@@ -34,24 +39,33 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ### 表结构
 - **表名**: `products`
 - **主键**: `id` (serial)
+- **序列**: `products_id_seq1`
 - **索引**: `product_name` (支持模糊搜索), `hs_code`
 
-### RLS 策略
-- 场景 A: 公开读写（无需登录）
-- 所有操作无需认证即可执行
+### API 端点
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| GET | `/api/products` | 获取产品列表 |
+| GET | `/api/products?keyword=xxx` | 搜索产品 |
+| POST | `/api/products` | 创建产品 |
+| PUT | `/api/products` | 更新产品 |
+| DELETE | `/api/products?id=xxx` | 删除产品 |
 
 ## 文件结构
 
 ```
 src/
 ├── app/
-│   └── page.tsx           # 产品管理主页面
+│   ├── page.tsx           # 产品管理主页面
+│   └── api/
+│       └── products/
+│           └── route.ts   # 原生 PostgreSQL API 路由
 ├── lib/
-│   ├── products.ts        # 产品 CRUD 操作函数
+│   ├── products.ts        # 产品 CRUD 操作 (调用 API)
+│   ├── db.ts              # PostgreSQL 连接池
 │   └── utils.ts           # 通用工具
-├── components/ui/         # shadcn/ui 组件库
-└── storage/database/
-    └── supabase-client-browser.ts  # Supabase 客户端
+└── components/ui/         # shadcn/ui 组件库
 ```
 
 ## 常用命令
@@ -77,6 +91,14 @@ pnpm start
 - ✅ 编辑产品 - 点击编辑按钮修改产品信息
 - ✅ 删除确认 - 二次确认后删除
 - ✅ 搜索筛选 - 支持按品名或 HS 编码搜索
+
+## 技术变更记录
+
+### 2024-04-18: 移除 Supabase 依赖
+- 移除了 `@supabase/supabase-js` 依赖
+- 创建原生 PostgreSQL API 路由 (`/api/products`)
+- 使用 `pg` 库直接连接 PostgreSQL
+- 前端通过 REST API 调用，不再依赖 Supabase 客户端
 
 ## 注意事项
 
