@@ -2,108 +2,115 @@
 
 ## 项目简介
 
-**产品 HS 编码管理系统** - 用于管理产品英文名称和 HS 海关编码的增删查改工具。
+**产品 HS 编码管理系统** - 前后端分离架构，通过 WebSocket 通信。
 
 ### 技术栈
-- **框架**: Next.js 16 (App Router)
-- **数据库**: PostgreSQL (原生 pg 库)
-- **ORM**: 无 (直接使用 SQL)
-- **API**: 原生 REST API (`/api/products`)
-- **UI**: shadcn/ui + Tailwind CSS 4
+- **前端**: Next.js 16 (App Router) + shadcn/ui + Tailwind CSS 4
+- **后端**: Node.js + WebSocket (ws) + SQLite (better-sqlite3)
+- **通信**: WebSocket
 - **包管理**: pnpm
 
-### 数据模型
+## 架构说明
 
-```typescript
-// products 表
-interface Product {
-  id: number;           // 自增主键
-  product_name: string;  // 英文品名
-  hs_code: string;       // HS 编码
-  created_at: string;    // 创建时间
-}
+```
+┌─────────────────┐         WebSocket          ┌─────────────────┐
+│   前端 (Vercel/ │  ◄──────────────────────►  │  后端 (Coze)     │
+│   GitHub Pages) │      ws://domain/ws/       │  SQLite DB       │
+└─────────────────┘                            └─────────────────┘
 ```
 
 ## 环境变量配置
 
+### 前端 (.env.local)
 ```env
-# PostgreSQL 连接字符串（必填）
-PGDATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+# 开发环境
+NEXT_PUBLIC_WS_URL=ws://localhost:5000/ws/products
 
-# 或分开配置
-DATABASE_URL=postgresql://...
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_NAME=postgres
+# 生产环境（部署后替换为你的公网域名）
+NEXT_PUBLIC_WS_URL=wss://your-domain.com/ws/products
 ```
 
-## 数据库配置
+### 后端
+无需配置，使用本地 SQLite 文件存储。
 
-### 表结构
-- **表名**: `products`
-- **主键**: `id` (serial)
-- **索引**: `product_name`, `hs_code`
+## 数据模型
 
-### 初始化 SQL
-```sql
-CREATE TABLE IF NOT EXISTS products (
-  id SERIAL PRIMARY KEY,
-  product_name VARCHAR(500) NOT NULL,
-  hs_code VARCHAR(20) NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_products_name ON products(product_name);
-CREATE INDEX IF NOT EXISTS idx_products_hs_code ON products(hs_code);
+```typescript
+interface Product {
+  id: number;           // 自增主键
+  product_name: string; // 英文品名
+  hs_code: string;      // HS 编码
+  created_at: string;   // 创建时间
+}
 ```
 
-### API 端点
+## WebSocket 消息协议
 
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| GET | `/api/products` | 获取产品列表 |
-| GET | `/api/products?keyword=xxx` | 搜索产品 |
-| POST | `/api/products` | 创建产品 |
-| PUT | `/api/products` | 更新产品 |
-| DELETE | `/api/products?id=xxx` | 删除产品 |
+| 客户端发送 | 说明 |
+|-----------|------|
+| `products:list` | 获取产品列表 |
+| `products:create` | 创建产品 |
+| `products:update` | 更新产品 |
+| `products:delete` | 删除产品 |
+
+| 服务端返回 | 说明 |
+|-----------|------|
+| `products:list:result` | 产品列表结果 |
+| `products:create:result` | 创建结果 |
+| `products:update:result` | 更新结果 |
+| `products:delete:result` | 删除结果 |
+| `products:*:error` | 错误信息 |
 
 ## 文件结构
 
 ```
 src/
 ├── app/
-│   ├── page.tsx           # 产品管理主页面
-│   └── api/
-│       └── products/
-│           └── route.ts   # PostgreSQL API 路由
+│   └── page.tsx           # 产品管理页面
 ├── lib/
-│   ├── products.ts        # 产品 CRUD 操作
-│   └── db.ts              # PostgreSQL 连接池
-└── components/ui/         # shadcn/ui 组件库
+│   └── ws-client.ts       # WebSocket 客户端
+└── components/ui/         # shadcn/ui 组件
+
+server/
+├── server.ts              # 服务器入口
+├── ws/
+│   ├── index.ts           # WebSocket 路由
+│   └── products.ts        # 产品处理器
+└── db/
+    └── sqlite.ts          # SQLite 数据库
+
+data/
+└── products.db            # SQLite 数据库文件
 ```
 
 ## 常用命令
 
+### 后端
 ```bash
-# 安装依赖
+# 安装后端依赖
 pnpm install
 
+# 启动后端服务
+pnpm start:backend
+
+# 或直接运行
+npx tsx server/server.ts
+```
+
+### 前端
+```bash
 # 开发环境
 pnpm dev
 
 # 构建生产版本
 pnpm build
-
-# 启动生产环境
-pnpm start
 ```
 
 ## 功能特性
 
-- ✅ 列表展示 - 分页展示所有产品
-- ✅ 新增产品 - 弹窗表单添加新产品
-- ✅ 编辑产品 - 点击编辑按钮修改产品信息
+- ✅ 列表展示 - 显示所有产品
+- ✅ 新增产品 - 表单添加新产品
+- ✅ 编辑产品 - 修改产品信息
 - ✅ 删除确认 - 二次确认后删除
-- ✅ 搜索筛选 - 支持按品名或 HS 编码搜索
+- ✅ 搜索筛选 - 按品名或 HS 编码搜索
+- ✅ 实时连接状态 - 显示 WebSocket 连接状态

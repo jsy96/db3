@@ -24,6 +24,11 @@ coverage/
 .env.test.local
 .env.production.local
 
+# Server & Data (本地运行，不上传)
+server/
+data/
+dist-server/
+
 # Logs
 logs/
 *.log

@@ -18,15 +18,14 @@ import {
 	AlertDialogTitle,
 	AlertDialogFooter,
 } from '@/components/ui/alert-dialog';
-import { Search, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
-import type { Product } from '@/lib/products';
-import { getProducts, createProduct, updateProduct, deleteProduct, searchProducts } from '@/lib/products';
+import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { productsWs, type Product } from '@/lib/ws-client';
 
 export default function ProductsPage() {
 	const [products, setProducts] = useState<Product[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [searchKeyword, setSearchKeyword] = useState('');
 	const [error, setError] = useState<string | null>(null);
+	const [connected, setConnected] = useState(false);
 
 	// 编辑状态
 	const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -40,37 +39,67 @@ export default function ProductsPage() {
 	// 删除状态
 	const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-	// 加载数据
-	const loadProducts = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		try {
-			const data = searchKeyword
-				? await searchProducts(searchKeyword)
-				: await getProducts();
-			setProducts(data);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : '加载失败');
-		} finally {
-			setLoading(false);
-		}
-	}, [searchKeyword]);
+	// 搜索状态
+	const [searchKeyword, setSearchKeyword] = useState('');
 
+	// WebSocket 消息处理
 	useEffect(() => {
-		loadProducts();
-	}, [loadProducts]);
+		// 连接 WebSocket
+		productsWs.connect().then(() => {
+			setConnected(true);
+			productsWs.listProducts();
+		}).catch(() => {
+			setError('无法连接到服务器');
+			setLoading(false);
+		});
+
+		// 监听消息
+		const unsubscribe = productsWs.onMessage((msg) => {
+			switch (msg.type) {
+				case 'products:list:result':
+					setProducts(msg.payload as Product[]);
+					setLoading(false);
+					setError(null);
+					break;
+				case 'products:create:result':
+					productsWs.listProducts(searchKeyword);
+					setAddForm({ product_name: '', hs_code: '' });
+					setAddDialogOpen(false);
+					break;
+				case 'products:update:result':
+					productsWs.listProducts(searchKeyword);
+					setEditDialogOpen(false);
+					setEditingProduct(null);
+					break;
+				case 'products:delete:result':
+					productsWs.listProducts(searchKeyword);
+					setDeleteConfirmId(null);
+					break;
+				case 'products:create:error':
+				case 'products:update:error':
+				case 'products:delete:error':
+					setError((msg.payload as { error: string }).error);
+					setLoading(false);
+					break;
+			}
+		});
+
+		return () => {
+			unsubscribe();
+			productsWs.close();
+		};
+	}, []);
+
+	// 搜索
+	const handleSearch = useCallback((keyword: string) => {
+		setSearchKeyword(keyword);
+		productsWs.listProducts(keyword);
+	}, []);
 
 	// 新增产品
-	const handleAdd = async () => {
+	const handleAdd = () => {
 		if (!addForm.product_name.trim() || !addForm.hs_code.trim()) return;
-		try {
-			await createProduct(addForm.product_name.trim(), addForm.hs_code.trim());
-			setAddForm({ product_name: '', hs_code: '' });
-			setAddDialogOpen(false);
-			loadProducts();
-		} catch (err) {
-			alert(err instanceof Error ? err.message : '添加失败');
-		}
+		productsWs.createProduct(addForm.product_name.trim(), addForm.hs_code.trim());
 	};
 
 	// 打开编辑弹窗
@@ -81,28 +110,15 @@ export default function ProductsPage() {
 	};
 
 	// 保存编辑
-	const handleSave = async () => {
+	const handleSave = () => {
 		if (!editingProduct || !editForm.product_name.trim() || !editForm.hs_code.trim()) return;
-		try {
-			await updateProduct(editingProduct.id, editForm.product_name.trim(), editForm.hs_code.trim());
-			setEditDialogOpen(false);
-			setEditingProduct(null);
-			loadProducts();
-		} catch (err) {
-			alert(err instanceof Error ? err.message : '更新失败');
-		}
+		productsWs.updateProduct(editingProduct.id, editForm.product_name.trim(), editForm.hs_code.trim());
 	};
 
 	// 删除确认
-	const handleDelete = async () => {
+	const handleDelete = () => {
 		if (deleteConfirmId === null) return;
-		try {
-			await deleteProduct(deleteConfirmId);
-			setDeleteConfirmId(null);
-			loadProducts();
-		} catch (err) {
-			alert(err instanceof Error ? err.message : '删除失败');
-		}
+		productsWs.deleteProduct(deleteConfirmId);
 	};
 
 	return (
@@ -114,10 +130,14 @@ export default function ProductsPage() {
 						<h1 className="text-2xl font-bold text-gray-900 dark:text-white">
 							产品 HS 编码管理
 						</h1>
-						<Button onClick={() => setAddDialogOpen(true)} className="gap-2">
-							<Plus className="w-4 h-4" />
-							新增产品
-						</Button>
+						<div className="flex items-center gap-2">
+							<span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+							<span className="text-sm text-gray-500">{connected ? '已连接' : '未连接'}</span>
+							<Button onClick={() => setAddDialogOpen(true)} className="gap-2 ml-2">
+								<Plus className="w-4 h-4" />
+								新增产品
+							</Button>
+						</div>
 					</div>
 				</div>
 			</header>
@@ -131,7 +151,7 @@ export default function ProductsPage() {
 						type="text"
 						placeholder="搜索产品名称或 HS 编码..."
 						value={searchKeyword}
-						onChange={(e) => setSearchKeyword(e.target.value)}
+						onChange={(e) => handleSearch(e.target.value)}
 						className="pl-10 bg-white dark:bg-gray-800"
 					/>
 				</div>
